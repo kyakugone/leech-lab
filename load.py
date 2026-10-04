@@ -7,16 +7,24 @@ load_dotenv()
 token = os.getenv("WANIKANI_TOKEN")
 database_url = os.getenv("DATABASE_URL")
 
-url = "https://api.wanikani.com/v2/review_statistics"
-records = []
 
-while url:
-    response = requests.get(url, headers={"Authorization": f"Bearer {token}"})
-    data = response.json()
-    records.extend(data["data"])
-    url = data["pages"]["next_url"]
+def fetch_all(url):
+    results = []
+    while url:
+        response = requests.get(url, headers={"Authorization": f"Bearer {token}"})
+        data = response.json()
+        if "data" not in data:
+            print(response.status_code, data)
+        results.extend(data["data"])
+        url = data["pages"]["next_url"]
+    return results
 
+
+records = fetch_all("https://api.wanikani.com/v2/review_statistics")
 print(len(records))
+
+subjects = fetch_all("https://api.wanikani.com/v2/subjects")
+print(len(subjects))
 
 with psycopg.connect(database_url) as conn:
     conn.execute("TRUNCATE review_statistics")
@@ -30,8 +38,24 @@ with psycopg.connect(database_url) as conn:
                 stats["meaning_incorrect"],
                 stats["reading_incorrect"],
                 stats["meaning_current_streak"],
-                stats["reading_current_streak"]
+                stats["reading_current_streak"],
+            ),
+        )
 
+    conn.execute("TRUNCATE subjects")
+    for subject in subjects:
+        info = subject["data"]
+        reading = None
+        if "readings" in info:
+            reading = info["readings"][0]["reading"]
+        conn.execute(
+            "INSERT INTO subjects VALUES (%s, %s, %s, %s, %s)",
+            (
+                subject["id"],
+                subject["object"],
+                info["characters"],
+                info["meanings"][0]["meaning"],
+                reading,
             ),
         )
 
