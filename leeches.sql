@@ -7,7 +7,8 @@ WITH scored AS (
     FROM review_statistics
 )
 SELECT characters, reading, meaning, incorrect, streak,
-       ROUND(incorrect / POWER(streak, 1.5), 2) AS score
+       ROUND(incorrect / POWER(streak, 1.5), 2) AS score,
+       subject_type
 FROM scored
 JOIN subjects ON subjects.id = scored.subject_id
 WHERE incorrect >= 3
