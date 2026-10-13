@@ -1,8 +1,9 @@
 import os
 import json
+import random
 import anthropic
 import psycopg
-import random
+from psycopg.types.json import Jsonb
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,7 +22,7 @@ with psycopg.connect(os.getenv("DATABASE_URL")) as conn:
 def make_passage(group):
     words = []
     for leech in group:
-                words.append(f"{leech[0]} ({leech[1]}): {leech[2]} [{leech[6]}]")
+        words.append(f"{leech[0]} ({leech[1]}): {leech[2]} [{leech[6]}]")
     word_list = "\n".join(words)
     print(word_list)
 
@@ -40,17 +41,23 @@ Respond with only JSON, no other text, in this shape:
 
 "answer" is the number of the correct choice, from 1 to 4."""
 
-    message = client.messages.create(
-        model="claude-sonnet-5-5",
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    for attempt in range(3):
+        message = client.messages.create(
+            model="claude-sonnet-5-5",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": prompt}],
+        )
 
-    text = ""
-    for block in message.content:
-        if block.type == "text":
-            text += block.text
-    text = text.strip().removeprefix("```json").removesuffix("```")
+        text = ""
+        for block in message.content:
+            if block.type == "text":
+                text += block.text
+        text = text.strip().removeprefix("```json").removesuffix("```")
+
+        if "\ufffd" not in text:
+            break
+        print("Bad character in reply, trying again...")
+
     passage = json.loads(text)
 
     print()
@@ -61,8 +68,14 @@ Respond with only JSON, no other text, in this shape:
     correct = passage["choices"][passage["answer"] - 1]
     random.shuffle(passage["choices"])
     answer = passage["choices"].index(correct) + 1
+    passage["answer"] = answer
+    with psycopg.connect(os.getenv("DATABASE_URL")) as conn:
+        conn.execute(
+            "INSERT INTO passages (words, data) VALUES (%s, %s)",
+            (word_list, Jsonb(passage)),
+        )
+
     print(passage["question"])
-   
     number = 1
     for choice in passage["choices"]:
         print(f"{number}. {choice}")
