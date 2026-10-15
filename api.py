@@ -4,6 +4,7 @@ from psycopg.rows import dict_row
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
@@ -13,6 +14,13 @@ class UTF8JSONResponse(JSONResponse):
 
 
 app = FastAPI(default_response_class=UTF8JSONResponse)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 with open("leeches.sql") as f:
     LEECH_QUERY = f.read()
